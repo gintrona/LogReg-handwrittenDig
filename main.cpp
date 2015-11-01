@@ -15,7 +15,6 @@ size_t numExamples;
 size_t numFeatures;
 size_t input_layer_size;// 20x20 Input Images of Digits
 size_t number_of_classes;
-int lambda;
 gsl_matrix * all_theta;
 gsl_matrix *TrainingX;
 gsl_vector *TrainingY;
@@ -37,9 +36,6 @@ if(OPERATION == READ || OPERATION == COMPUTE){
 	TrainingX = gsl_matrix_alloc(numExamples, numFeatures+1);
 	TrainingY = gsl_vector_alloc(numExamples);
 
-	// REGULARIZATION FACTOR
-	lambda = 0.0;
-
 	/*Loading Data = dataset contains handwritten digits.*/
 	cout <<"Loading  Data ...\n"<<endl;
 
@@ -48,7 +44,7 @@ if(OPERATION == READ || OPERATION == COMPUTE){
 
 if(OPERATION == COMPUTE){
 	
-	one_vs_all(all_theta , TrainingX, TrainingY, number_of_classes , lambda);
+	one_vs_all(all_theta , TrainingX, TrainingY, number_of_classes);
 	double accu;
 	accu = calculateAccuracy(all_theta, TrainingX, TrainingY);
 	cout<<"The accuracy is "<< accu<< "%."<<endl;

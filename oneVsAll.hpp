@@ -27,7 +27,8 @@
 //** filterY declaration
 void filterY( const gsl_vector * source , gsl_vector * dest, const int& pattern);
 
-void one_vs_all(gsl_matrix * all_theta , gsl_matrix * X, gsl_vector* y, const size_t& num_classes,const int& lambda){
+//Calculate the all_theta matrix, where each row is a class and each column represents a feature
+void one_vs_all(gsl_matrix * all_theta , gsl_matrix * X, gsl_vector* y, const size_t& num_classes){
 
 size_t m = X->size1; //nb of examples
 size_t n = X->size2; //nb of features + 1
@@ -37,12 +38,13 @@ gsl_vector * binaryVector= gsl_vector_alloc(m);
 gsl_vector * initial_theta = gsl_vector_alloc(n);//n is the number of features+1
 
 const gsl_multimin_fdfminimizer_type *T;
+
 //** choosing the minimizer
 T = gsl_multimin_fdfminimizer_vector_bfgs2;	
 gsl_multimin_fdfminimizer * s = gsl_multimin_fdfminimizer_alloc(T, n);
 
 double tol	= 1e-1;
-double step_size= 0.1;
+double step_size= 1.0;
 
 //** setting the cost function and its gradient
 gsl_multimin_function_fdf funcToMinimize;
@@ -105,8 +107,10 @@ size_t nbClassifiers = all_theta->size1;
 gsl_vector * maxis = gsl_vector_alloc(num_examples);
 gsl_matrix * resu = gsl_matrix_alloc(num_examples,nbClassifiers);
 
+/*Compute resu = X all_theta' ; all_theta is transponse */
 gsl_blas_dgemm(CblasNoTrans, CblasTrans, 1.0,X, all_theta, 0.0, resu);
 
+//vector maxis contains the index of the maximum value for each row of resu
 for(size_t i=0 ; i <num_examples ; i++){
 	gsl_vector_view row = gsl_matrix_row(resu, i);
 	gsl_vector_set(maxis, i , gsl_vector_max_index(&row.vector));
@@ -119,7 +123,7 @@ for(size_t i=0 ; i <num_examples ; i++){
 	}
 }
 
-//Compare computed values with actual values, ie binary with maxis.
+//Compare computed values with actual values, ie binary with vector maxis.
 return 100*(acum/num_examples);
 }
 

@@ -5,7 +5,6 @@ This code implements one-vs-all logistic regression to recognize handwritten dig
 
 After having trained the algorithm, the program calculates the accuracy.
 
-Improvements to be done (hopefully) in the near future: 
+Improvements to be done in the near future: 
 
-* Regularization to address overfitting .
 * Parallelization,
