@@ -1,5 +1,4 @@
 *~
 *.txt
-*original
 !example.txt
 !exampleTest.txt

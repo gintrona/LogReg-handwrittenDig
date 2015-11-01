@@ -23,77 +23,106 @@
 #include <sstream>
 #include <iterator>
 #include "costFunction.hpp"
+#include <thread> //std::thread
+#include <mutex>
+
+std::mutex mtx;
 
 //** filterY declaration
 void filterY( const gsl_vector * source , gsl_vector * dest, const int& pattern);
 
+void calculateThetaForClass(const int &Class,gsl_matrix * all_theta,gsl_matrix * X,gsl_vector* y, gsl_vector * initial_theta);
+
 //Calculate the all_theta matrix, where each row is a class and each column represents a feature
 void one_vs_all(gsl_matrix * all_theta , gsl_matrix * X, gsl_vector* y, const size_t& num_classes){
 
-size_t m = X->size1; //nb of examples
-size_t n = X->size2; //nb of features + 1
+	size_t m = X->size1; //nb of examples
+	size_t n = X->size2; //nb of features + 1
 
-gsl_vector * binaryVector= gsl_vector_alloc(m);
-
-gsl_vector * initial_theta = gsl_vector_alloc(n);//n is the number of features+1
-
-const gsl_multimin_fdfminimizer_type *T;
-
-//** choosing the minimizer
-T = gsl_multimin_fdfminimizer_vector_bfgs2;	
-gsl_multimin_fdfminimizer * s = gsl_multimin_fdfminimizer_alloc(T, n);
-
-double tol	= 1e-1;
-double step_size= 1.0;
-
-//** setting the cost function and its gradient
-gsl_multimin_function_fdf funcToMinimize;
-funcToMinimize.n 	= n;
-funcToMinimize.f	= &costFunction;
-funcToMinimize.df 	= &costFunctionGradient;
-funcToMinimize.fdf 	= &costFunctionAll;
-
-
-for (int ClassIter = 1; ClassIter< num_classes+1; ClassIter++){//ClassIter = [1..10]
-	cout<< "ClassIter " <<ClassIter <<endl;
-
-	size_t iter 	= 0;
-	int status	= GSL_CONTINUE;
-
-	//** make a binary vector from the 
-	filterY( y , binaryVector,ClassIter );
-
-	//** Initialize a Params Object, containing pointers to the input  
-	Params TrainingParams(X,binaryVector);
-	funcToMinimize.params 	= &TrainingParams; //pass X and y
-
+	//n is the number of features+1
+	gsl_vector * initial_theta = gsl_vector_alloc(n);
 	//** intial thetas to zeros
 	gsl_vector_set_zero(initial_theta);
 
-	gsl_multimin_fdfminimizer_set(s, &funcToMinimize, initial_theta, step_size, tol);
-	
-	while (status == GSL_CONTINUE && iter < 100)
-	    {
-		status = gsl_multimin_fdfminimizer_iterate(s);
+	//initialize threads and launch threads
+	std::vector<std::thread> vThreads;
+	for (int i=0; i<num_classes; i++){
+		vThreads.push_back(std::thread(calculateThetaForClass, i+1, all_theta, X, y, initial_theta));
+		}
 
+	//join threads	
+  	for (std::vector<std::thread>::iterator it = vThreads.begin() ; it != vThreads.end(); ++it) it->join();
+	
+	gsl_vector_free(initial_theta);
+}
+
+
+//** calculate the theta values for one class
+void calculateThetaForClass(const int &Class, gsl_matrix * all_theta,gsl_matrix * X,gsl_vector* y, gsl_vector * initial_theta){
+
+
+	const gsl_multimin_fdfminimizer_type *T;
+
+	size_t m = X->size1; //nb of examples
+	size_t n = X->size2; //nb of features + 1
+
+	//** choosing the minimizer
+	T = gsl_multimin_fdfminimizer_vector_bfgs2;	
+	gsl_multimin_fdfminimizer * minimizer = gsl_multimin_fdfminimizer_alloc(T, n);
+	
+	//params for the minimizer
+	double tol	= 1e-1;
+	double step_size= 1.0; 
+
+
+	//setting the cost function and its gradient
+	gsl_multimin_function_fdf funcToMinimize;
+	funcToMinimize.n 	= n;
+	funcToMinimize.f	= &costFunction;
+	funcToMinimize.df 	= &costFunctionGradient;
+	funcToMinimize.fdf 	= &costFunctionAll;
+
+	//binary vector: 1 if elem in input vector y == Class, 0 otherwise  
+	gsl_vector * binaryVector= gsl_vector_alloc(m);
+	filterY( y , binaryVector,Class );
+	
+	mtx.lock();
+	cout<< "Class " <<Class <<endl;//<< "use std::this_thread::get_id() to get the thread's id	
+	mtx.unlock();
+
+	//** Initialize a Params Object, containing pointers to the input  
+	Params TrainingParams(X, binaryVector);
+	funcToMinimize.params 	= &TrainingParams; //pass X and binaryVector :
+	// TODO improve this->  X is the same for all threads
+
+	gsl_multimin_fdfminimizer_set(minimizer, &funcToMinimize, initial_theta, step_size, tol);
+	
+	size_t iter 	= 0;
+	int status	= GSL_CONTINUE;
+
+	while (status == GSL_CONTINUE && iter < 100){
+		status = gsl_multimin_fdfminimizer_iterate(minimizer);
 		if (status)
 			break;
-
-		status = gsl_multimin_test_gradient(s->gradient, 0.5e-2);//1e-3
-	
+		status = gsl_multimin_test_gradient(minimizer->gradient, 0.5e-2);
 	 	if (status == GSL_SUCCESS){
 			for (int i=0 ; i < n;i++){			
-		 gsl_matrix_set(all_theta , ClassIter-1 , i , gsl_vector_get(s->x,i));			
+		 		gsl_matrix_set(all_theta , Class-1 , i , gsl_vector_get(minimizer->x,i));			
 			}
-		cout<< "Success for iter "<<ClassIter<<" min Cost is "<<s->f <<endl;
+			mtx.lock();
+			cout<< "Success for Class "<<Class<<"; min Cost is "<<minimizer->f <<endl;
+			mtx.unlock();
 		}
 	    iter++;
 	    }
+
+	//free memory
+	gsl_vector_free(binaryVector);
+	gsl_multimin_fdfminimizer_free(minimizer);
+
 }
-gsl_vector_free(initial_theta);
-gsl_multimin_fdfminimizer_free(s);
-gsl_vector_free(binaryVector);
-}
+
+
 
 //** Accuracy function **//
 
