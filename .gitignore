@@ -1,4 +1,5 @@
 *~
+*.x
 *.txt
 !example.txt
 !exampleTest.txt
